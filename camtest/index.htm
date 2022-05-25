@@ -1,0 +1,245 @@
+<html>
+
+<head>
+    <title>TEST</title>
+</head>
+
+<body style="font-family: sans-serif">
+    <div id="canv"></div>
+    <script src="./p5.min.js"></script>
+    <script text="">
+        let n, e, S, t, RA = Math.PI / 180,
+            A = (a, f) => { let e = []; for (let t in a) { e.push(f(a[t])) }; return e },                                                                                                                                     // loop through all parts in struct
+            L = (N, f) => [...Array(N)].map((_, i) => f(i)),                                                                                                                                                       // for array 
+            X = a => a.split(","),
+            minmax = a => ({ mi: Math.min(...a), ma: Math.max(...a) })
+        //===================================================================================================================================================================        
+        function V(x = 0, y = 0, z = 0) {                                                           // VECTOR class
+            let add = (v, c = 1) => V(x + v.x * c, y + v.y * c, z + v.z * c)                        // ADD, multiply + add ( add(x,-1) = subtract
+            let M = (s) => s.x == undefined ? V(x * s, y * s, z * s) : V(x * s.x, y * s.y, z * s.z)  // Multiply by scalar s or element-by element Vector S            
+            let dot = (v) => x * v.x + y * v.y + z * v.z;                                           // dot product
+            let cx = (v) => V(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x)              // cross product
+            // get spherical data  (theta, phi, radius = t,p,r)
+            let gs = () => (t = L({ x, y, z }), { r: t, t: t == 0 ? 0 : Math.atan2(x, y) / RA, p: t == 0 ? 0 : Math.acos(Math.max(-1, Math.min(1, z / t))) / RA })
+            // set spherical
+            let ss = (s) => (t = Math.sin(s.p * RA) * s.r, V(t * Math.sin(s.t * RA), t * Math.cos(s.t * RA), Math.cos(s.p * RA) * s.r))       // set spherical
+            let L = () => Math.sqrt(x ** 2 + y ** 2 + z ** 2)                                                                                 // length
+            let N = () => { t = L({ x, y, z }); return t == 0 ? V() : V(x / t, y / t, z / t) };                                               // normalize
+            let mid = (B, C = null) => C == null ? V(x, y, z).add(B).M(0.5) : V(x, y, z).add(B).add(C).M(1 / 3)                     // midpoint                                                         
+            return { x, y, z, add, dot, cx, M, gs, ss, L, N, mid }
+        }
+        //===================================================================================================================================================================
+        function V2(x = 0, y = 0) { return { x, y } }
+        //===================================================================================================================================================================
+        class T { // transformation class
+            constructor() {
+                this.F = [
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1];
+                this.target = V()
+            }
+
+            //----------------------------------------------------------------  position in  cartesian coordinates
+            get p() { return V(this.F[12], this.F[13], this.F[14]) }                                                                        // position 
+            set p(V) { this.F[12] = V.x; this.F[13] = V.y; this.F[14] = V.z; return this; }
+            get scale() { return V(this.F[0], this.F[5], this.F[10]); }
+            set scale(V) { this.F[0] = V.x; this.F[5] = V.y; this.F[10] = V.z; return this; }
+            get Zaxis() { return V(this.F[8], this.F[9], this.F[10]) }
+            get I() { // Inverse
+                let orig = this.F, dest = new T(), x = orig[12], y = orig[13], z = orig[14];
+                L(3, i => L(3, j => dest.F[i * 4 + j] = orig[i + j * 4]))
+                return dest.T(V(-x, -y, -z))
+            }
+            La(Eye, Target = V(0, 0, 0), UP = V(0, 1, 0)) {  // 
+                this.target = Target;
+                let zaxis = Eye.add(Target, -1).N(), xaxis = UP.cx(zaxis).N(), yaxis = zaxis.cx(xaxis);
+                this.F = [xaxis.x, xaxis.y, xaxis.z, 0, yaxis.x, yaxis.y, yaxis.z, 0, zaxis.x, zaxis.y, zaxis.z, 0, Eye.x, Eye.y, Eye.z, 1]
+            }
+            P(verticalFov, aspectRatio, near, far) {        // set perspective
+                let height_div_2n = Math.tan(verticalFov * Math.PI / 360), width_div_2n = aspectRatio * height_div_2n
+                this.F = [
+                    1 / height_div_2n, 0, 0, 0,
+                    0, 1 / width_div_2n, 0, 0,
+                    0, 0, (far + near) / (near - far), -1,
+                    0, 0, 2 * far * near / (near - far), 0]
+                return this;
+            }
+            // orthognoal projection   
+            O(w, h, d) {
+                this.F = [
+                    2 / w, 0, 0, 0,
+                    0, 2 / h, 0, 0,
+                    0, 0, -2 / d, 0,
+                    0, 0, 0, 1]; return this
+            }
+            // multiply matricezs
+            M(t) { let output = new T(); L(4, i => L(4, j => { let sum = 0; L(4, k => { sum += this.F[k * 4 + i] * t.F[j * 4 + k] }); output.F[j * 4 + i] = sum })); return output; }
+            // multiply vector
+            Mv(v, s = 1) {  //xyzw   ; for calculating normals, set s to 0
+                let F = this.F;
+                let x = v.x * F[0] + v.y * F[4] + v.z * F[8] + F[12] * s;
+                let y = v.x * F[1] + v.y * F[5] + v.z * F[9] + F[13] * s;
+                let z = v.x * F[2] + v.y * F[6] + v.z * F[10] + F[14] * s;
+                let W = v.x * F[3] + v.y * F[7] + v.z * F[11] + F[15] * s;
+                if (W != 1 && W != 0) { x /= W; y /= W; z /= W; }
+                return V(x, y, z)
+            }
+            // translate
+            T(v) { t = new T(); t.F[12] = v.x; t.F[13] = v.y; t.F[14] = v.z; return this.M(t); }
+            // rotate
+            rm(angle, a, b, c, d) {
+                let e = Math.cos(angle * RA), s = Math.sin(angle * RA), t = new T(); t.F[a] = e; t.F[b] = e; t.F[c] = -s; t.F[d] = s;
+                return this.M(t)
+
+            }
+            RZ(angle) { return this.rm(angle, 0, 5, 4, 1) }
+            RX(angle) { return this.rm(angle, 5, 10, 9, 6) }
+            RY(angle) { return this.rm(angle, 0, 10, 2, 8) }
+        }
+
+
+
+        //===================================================================================================================================================================
+        class Camera3D {
+            constructor() { this.position = new T(); this.projection = new T(); }
+        }
+        let cam = new Camera3D();
+
+        //===================================================================================================================================================================
+        //===================================================================================================================================================================
+        class plane {  // rectangular plane. set only 2 of 3 dimensions (x,y,z).  these will determine the orientation.  set nd to +1 or -1 to set normal  direction
+            constructor(V0, { x, y, z }, nd, fc = "white", sc = "black") {  // center point,  size , normal direction, fill color, stroke color                       
+                let q = x == 0 ? -1 : 1; z /= 2; x /= 2; y /= 2;
+                this.basepoints = [V(-x, -y, -z).add(V0), V(+x, -y * q, -z).add(V0), V(+x, +y, +z).add(V0), V(-x, +y * q, +z).add(V0)]
+                this.position = new T(); this.fillcolor = fc; this.strokecolor = sc
+                let p = this.basepoints;
+                this.normal = p[0].add(p[1], -1).cx(p[0].add(p[3], -1)).N().M(nd) // find normal by cross-product of edges                
+                this.update()
+            }
+
+            update(relpos = new T()) {                                                  // updates the points based on the world position
+                this.worldpos = relpos.M(this.position)
+                this.points = A(this.basepoints, p => this.worldpos.Mv(p)); return [this]
+
+            }
+
+            dist(cam) {
+                let p2 = new T().O(1, 1, 10)          // set projection matrix
+                this.d = minmax(A(this.points, p => p2.M(cam.position.I).Mv(p).z))                // min /max distance
+                this.norm = this.worldpos.Mv(this.normal, 0)
+                this.visible = this.norm.dot(cam.position.p.N()) > 0
+                if (!this.visible) this.d = { ma: 10000, mi: 10000 }                      // draw first (for lines)
+            }
+
+            draw() {
+                beginShape()
+                A(this.basepoints, p => {
+                    let pt = cam.projection.M(cam.position.I).M(this.worldpos).Mv(p);
+                    if (pt.z > 0) vertex(pt.x, pt.y, 0)
+                })
+                endShape(CLOSE)
+            }
+
+            drawfill() {
+                if (!this.visible) return;
+                stroke(this.strokecolor)
+                if (this.visible && this.fc != "none") fill(this.fillcolor)
+                this.draw()
+            }
+
+            drawstroke(showhidden = false) {
+                noFill();
+                stroke(this.strokecolor)
+                if (!this.visible) {
+                    if (!showhidden) return;
+                    stroke("#0000001A")
+                }
+                this.draw()
+            }
+        }
+
+        //===================================================================================================================================================================
+        //===================================================================================================================================================================
+        class block {
+            constructor(V0, { x, y, z }, fc = ["white"], sc = ["black"]) {   // center point,  size , normal direction, fill color, stroke color
+                this.fillcolor = L(6, i => fc[Math.min(i, fc.length)]);
+                this.strokecolor = L(6, i => sc[Math.min(i, sc.length)]);
+                this.position = new T()
+                this.position.p = V0;
+                this.o = []
+                let s = .995
+                this.o.push(new plane(V(0, 0, z / 2), V(x * s, y * s, 0), 1, this.fillcolor[0], this.strokecolor[0]))
+                this.o.push(new plane(V(0, 0, -z / 2), V(x * s, y * s, 0), -1, this.fillcolor[3], this.strokecolor[3]))
+                this.o.push(new plane(V(0, -y / 2, 0), V(x * s, 0, z * s), 1, this.fillcolor[1], this.strokecolor[1]))
+                this.o.push(new plane(V(0, y / 2, 0), V(x * s, 0, z * s), -1, this.fillcolor[4], this.strokecolor[4]))
+                this.o.push(new plane(V(-x / 2, 0, 0), V(0, y * s, z * s), -1, this.fillcolor[2], this.strokecolor[2])) // x,y
+                this.o.push(new plane(V(+x / 2, 0, 0), V(0, y * s, z * s), 1, this.fillcolor[5], this.strokecolor[5])) // x,y
+            }
+            update(relpos = new T()) { let udx = A(this.o, o => { return o.update(relpos.M(this.position)) }); return udx.flat(); }
+        }
+        //===================================================================================================================================================================
+        //===================================================================================================================================================================
+        class group {
+            constructor(D) { this.o = D; this.position = new T() }
+            update(relpos = new T()) { let udx = A(this.o, o => { return o.update(relpos.M(this.position)) }); return udx.flat(); }
+        }
+        //===================================================================================================================================================================
+        //===================================================================================================================================================================
+        function sortobjects(ob, cam) {
+            let eps = .3
+            A(ob, o => { o.dist(cam) })
+            for (var i = 0; i < ob.length - 1; i++) {
+                for (var j = i + 1; j < ob.length; j++) {
+                    if ((ob[i].d.ma < (ob[j].d.ma - eps)) || ((Math.abs(ob[i].d.ma - ob[j].d.ma) < eps) && (ob[i].d.mi < (ob[j].d.mi - eps)))) { x = ob[j]; ob[j] = ob[i]; ob[i] = x }
+                }
+            }
+            return ob
+        }
+
+
+
+        //===================================================================================================================================================================
+        //===================================================================================================================================================================
+        let objects, cubes, phi = 85, theta = 0
+        function setup() {
+            canvas = createCanvas(1000, 1000);
+            objects = []
+            let s = 100, s2 = s - 10, n = 2, d = (n - 1) / 2
+            cubes = L(n, i => L(n, j => L(n, k => new group([new block(V((i - d) * s, (j - d) * s, (k - d) * s), V(s2, s2, s2), X("red,blue,green,yellow,orange,white"), ["black"])]))))
+            objects.push(...cubes.flat(4))
+            background("lightblue")
+            stroke("black")
+            strokeWeight(2)
+        }
+
+        //===================================================================================================================================================================
+        //===================================================================================================================================================================
+        function draw() {
+            translate(width / 2, height / 2)
+
+            // sets the camera rotation () mouse)
+            theta = mouseX / width * 360
+            phi = (mouseY / height) * 180
+            let p = V().ss({ t: theta, p: phi, r: 400 })
+
+            let fov = 0.1, aspect = 1, near = .01, far = 10
+
+            cam.projection = cam.projection.P(fov, aspect, near, far)          // set projection matrix
+            cam.position.La(p, V(0.1, 0.1, 0.1), V(0, 0, 1))
+
+
+            let planes = A(objects, o => o.update()).flat()                    // update object matrices, extract planes
+            planes = sortobjects(planes, cam)                                  // sort for correct drawing order (furthest away objects first)
+
+            background("lightblue")
+            A(planes, p => p.drawfill())
+
+        }
+
+
+
+
+    </script>
+</body>
