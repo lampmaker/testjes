@@ -4,11 +4,29 @@ Zet de geometrie van een ShadyTracer-scène om in één wiskundige functie van h
 **p = (x, y, z)**: de signed distance `f(x, y, z)` — negatief binnen, positief buiten, nul op
 het oppervlak. Geen lichten, materialen, texturen of camera.
 
-Uitvoer in drie vormen:
+De formule wordt in wiskundige notatie geschreven: breuken, wortels, `|x|`, `x²`, `min`/`max`,
+en een vertakking als accolade met gevallen ("als … / anders"). Delen die meer dan eens
+voorkomen, en de afstand van elk object, krijgen een eigen naam (`d_ball`, `u₁`) die onder de
+formule wordt gedefinieerd ("waarin"), in leesvolgorde.
 
-- **Formule** (tekst), met de onderdelen als benoemde deeltermen (`d_ball = √(...) - 30`);
-- **JavaScript**: `sdfXYZ(x, y, z)` en `sdf([x, y, z])`, los bruikbaar;
-- **GLSL**: `float sdf(vec3 p)`, bijvoorbeeld voor Shadertoy.
+Uitvoer:
+
+- **Formule**: op de pagina gerenderd (KaTeX); in de terminal als Unicode-tekst;
+- **LaTeX**: een `align*`-blok voor een document (amsmath);
+- **JavaScript** (`sdfXYZ(x, y, z)`) en **GLSL** (`float sdf(vec3 p)`), om hem uit te rekenen.
+
+Voorbeeld (`first-steps.json`, deels):
+
+```
+f(x, y, z) = min(z, d[ball], d[block], d[glass cylinder], d[blended pair])
+
+waarin
+  d[ball]           = √((x + 70)² + y² + (z − 30)²) − 30
+  d[block]          = √(max(u₁, 0)² + max(u₂, 0)² + max(u₃, 0)²) + min(max(u₁, u₂, u₃), 0) − 4
+  u₁                = |0.939693x + 0.34202(y − 20)| − 21
+  ...
+  d[blended pair]   = min(d[sphere], d[box]) − 0.25·max(12 − |d[sphere] − d[box]|, 0)² / 12
+```
 
 Met `--inline` (of het vinkje op de pagina) wordt het één enkele expressie zonder deeltermen —
 de "pure" formule. Die kan veel langer worden, omdat een gedeelde deelterm dan bij elk gebruik
@@ -20,13 +38,14 @@ Exporteer in ShadyTracer een scène (File › Export › scene, een `.json` met
 `"format": "raytracer-scene"`). Dan:
 
 ```
-node sdf-formula/cli.mjs scene.json                     # de formule als tekst
+node sdf-formula/cli.mjs scene.json                     # de formule (Unicode)
+node sdf-formula/cli.mjs scene.json --format latex -o f.tex
 node sdf-formula/cli.mjs scene.json --format js -o sdf.js
 node sdf-formula/cli.mjs scene.json --format glsl --no-planes
 node sdf-formula/cli.mjs scene.json --at 0,0,20         # ook f in dat punt
 ```
 
-Opties: `--format text|js|glsl`, `--inline`, `--digits N`, `--skip-unsupported` (laat weg wat
+Opties: `--format math|latex|js|glsl`, `--inline`, `--digits N`, `--skip-unsupported` (laat weg wat
 niet kan, in plaats van te stoppen), `--no-planes` (laat oneindige vlakken zoals de vloer weg),
 `--exclude label1,label2`.
 
@@ -38,9 +57,10 @@ Als module:
 
 ```js
 import { sceneToSDF } from './sdf-formula/src/scene.js'
-import { toText, toJS, toGLSL, compile } from './sdf-formula/src/emit.js'
+import { toMath, toLatex } from './sdf-formula/src/math.js'
+import { toJS, toGLSL, compile } from './sdf-formula/src/emit.js'
 const r = sceneToSDF(sceneJson, { skipUnsupported: true })
-console.log(toText(r.d, { labels: r.labels }))
+console.log(toMath(r.d, { labels: r.labels }))
 const f = compile(r.d)            // f(x, y, z) -> afstand
 ```
 

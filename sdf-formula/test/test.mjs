@@ -19,6 +19,7 @@ import { Program, Interp, vec } from '../src/interp.js'
 import { PRELUDE } from '../src/prelude.js'
 import { sceneToSDF, xfPoint } from '../src/scene.js'
 import { compile, toText, toJS, toGLSL } from '../src/emit.js'
+import { toMath, toLatex, latexLines } from '../src/math.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ST = resolve(process.argv[2] || process.env.SHADYTRACER || resolve(here, '../../../ShadyTracer'))
@@ -247,6 +248,11 @@ for (const f of readdirSync(dir).filter(f => f.endsWith('.json'))) {
     // ---- 5. THE EMITTERS ----
     const t = toText(r.d, { labels: r.labels }), js = toJS(r.d, { labels: r.labels }), gl = toGLSL(r.d, { labels: r.labels })
     ok(`${f}: text, JS and GLSL written`, t.startsWith('f(x, y, z) = ') && js.includes('export function sdfXYZ') && gl.includes('float sdf(vec3 p)'))
+    // the mathematical notation: no programming language left in it, and every name it uses defined once
+    const m = toMath(r.d, { labels: r.labels }), lines = latexLines(r.d, { labels: r.labels }), tex = toLatex(r.d, { labels: r.labels })
+    ok(`${f}: the formula in mathematical notation has no ? : && || * of a programming language`, m.startsWith('f(x, y, z) = ') && !/\?|&&|\|\||\*|!=|<=|>=/.test(m), m.match(/.*(\?|&&|\|\||\*|!=|<=|>=).*/)?.[0])
+    const defined = lines.slice(1).map(([l]) => l), used = new Set(lines.flatMap(([, rr]) => rr.match(/[ud]_\{[^}]*\}(\})?/g) || []).map(u => u.replace(/\}\}$/, '}}')))
+    ok(`${f}: LaTeX: every part defined once, every part used`, new Set(defined).size === defined.length && defined.every(d => [...used].some(u => u.startsWith(d.slice(0, -1)))) && tex.includes('\\begin{align*}'))
     try {
         const one = compile(r.d, { inline: true })
         const p = [U(-box, box) * 0.3, U(-box, box) * 0.3, U(0, box * 0.3)]

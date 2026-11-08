@@ -61,6 +61,7 @@ export function add(x, y) {
     if (num(y) && y < 0) return sub(x, -y)
     if (isNode(y) && y.op === 'neg') return sub(x, y.a[0])
     if (isNode(x) && x.op === 'neg') return sub(y, x.a[0])
+    if (isNode(y) && y.op === 'mul' && num(y.a[1]) && y.a[1] < 0) return sub(x, mul(y.a[0], -y.a[1]))   // x + (-c) u: x - c u
     // (u + c1) + c2 and (u - c1) + c2: one constant
     if (num(y) && isNode(x) && (x.op === 'add' || x.op === 'sub') && num(x.a[1]))
         return add(x.a[0], (x.op === 'add' ? x.a[1] : -x.a[1]) + y)
@@ -74,6 +75,9 @@ export function sub(x, y) {
     if (x === y) return 0
     if (num(y) && y < 0) return add(x, -y)
     if (isNode(y) && y.op === 'neg') return add(x, y.a[0])
+    if (isNode(y) && y.op === 'mul' && num(y.a[1]) && y.a[1] < 0) return add(x, mul(y.a[0], -y.a[1]))   // x - (-c) u: x + c u
+    if (num(x) && isNode(y) && (y.op === 'add' || y.op === 'sub') && num(y.a[1]))                     // c1 - (u + c2): (c1 - c2) - u
+        return sub(x - (y.op === 'add' ? y.a[1] : -y.a[1]), y.a[0])
     if (num(y) && isNode(x) && (x.op === 'add' || x.op === 'sub') && num(x.a[1]))
         return add(x.a[0], (x.op === 'add' ? x.a[1] : -x.a[1]) - y)
     return mk('sub', x, y)
@@ -165,11 +169,19 @@ function cmp(op) {
     }
 }
 export const lt = cmp('lt'), le = cmp('le'), gt = cmp('gt'), ge = cmp('ge'), eq = cmp('eq'), ne = cmp('ne')
+/* the terms of a chain of one logical op: a and (b and c) is [a, b, c] */
+const terms = (v, op) => isNode(v) && v.op === op ? [...terms(v.a[0], op), ...terms(v.a[1], op)] : [v]
 export function and(x, y) {
     if (x === false || y === false) return false
     if (x === true) return y
     if (y === true) return x
     if (x === y) return x
+    // absorption: a and (a or b) is a; a term already there is not repeated
+    const xs = terms(x, 'and'), ys = terms(y, 'and')
+    if (ys.every(t => xs.includes(t))) return x
+    if (xs.every(t => ys.includes(t))) return y
+    if (isNode(x) && x.op === 'or' && terms(x, 'or').some(t => ys.includes(t))) return y
+    if (isNode(y) && y.op === 'or' && terms(y, 'or').some(t => xs.includes(t))) return x
     return mk('and', x, y)
 }
 export function or(x, y) {
@@ -177,6 +189,11 @@ export function or(x, y) {
     if (x === false) return y
     if (y === false) return x
     if (x === y) return x
+    const xs = terms(x, 'or'), ys = terms(y, 'or')
+    if (ys.every(t => xs.includes(t))) return x
+    if (xs.every(t => ys.includes(t))) return y
+    if (isNode(x) && x.op === 'and' && terms(x, 'and').some(t => ys.includes(t))) return y
+    if (isNode(y) && y.op === 'and' && terms(y, 'and').some(t => xs.includes(t))) return x
     return mk('or', x, y)
 }
 const NOT_OF = { lt: 'ge', le: 'gt', gt: 'le', ge: 'lt', eq: 'ne', ne: 'eq' }
@@ -193,6 +210,14 @@ export function sel(c, a, b) {
     if (a === b) return a
     if (a === true && b === false) return c
     if (a === false && b === true) return not(c)
+    // a choice between truths is logic: c ? true : b is c or b, ...
+    if (a === true) return or(c, b)
+    if (b === false) return and(c, a)
+    if (a === false) return and(not(c), b)
+    if (b === true) return or(not(c), a)
+    // the same question asked twice: c ? (c ? a : b) : d is c ? a : d
+    if (isNode(a) && a.op === 'sel' && a.a[0] === c) return sel(c, a.a[1], b)
+    if (isNode(b) && b.op === 'sel' && b.a[0] === c) return sel(c, a, b.a[2])
     if (isNode(c) && c.op === 'not') return sel(c.a[0], b, a)
     if (isNode(c) && ['lt', 'le', 'gt', 'ge'].includes(c.op)) {
         const [u, w] = c.a, less = c.op === 'lt' || c.op === 'le'

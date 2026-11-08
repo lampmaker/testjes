@@ -2,15 +2,17 @@
 // A ShadyTracer scene as its SDF, written out: node sdf-formula/cli.mjs scene.json [options]  (--help for them)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { sceneToSDF } from './src/scene.js'
-import { toText, toJS, toGLSL, compile } from './src/emit.js'
+import { toJS, toGLSL, compile } from './src/emit.js'
+import { toMath, toLatex } from './src/math.js'
 
 const HELP = `node cli.mjs <scene.json> [options]
 
   The scene's signed distance f(x, y, z) as a formula: geometry only -- no lights, materials or textures.
 
-  --format text|js|glsl   what to write (default text)
+  --format math|latex|js|glsl   what to write (default math: the formula in mathematical notation, Unicode;
+                          latex: the same for a LaTeX document; js and glsl: code that computes it)
   --inline                one expression, no named parts (can be very long)
-  --digits N              significant digits of the numbers (text 6, js 15, glsl 9)
+  --digits N              significant digits of the numbers (math and latex 6, js 15, glsl 9)
   --skip-unsupported      leave out what the formula cannot hold (a path, noise) instead of stopping
   --no-planes             leave out infinite planes (a floor)
   --exclude a,b           leave out these nodes, by label or id
@@ -38,12 +40,12 @@ try {
     process.exit(2)
 }
 
-const fmt = opt('--format', 'text'), digits = opt('--digits') ? +opt('--digits') : undefined
+const fmt = ({ text: 'math', tex: 'latex' })[opt('--format', 'math')] ?? opt('--format', 'math'), digits = opt('--digits') ? +opt('--digits') : undefined
 const o = { labels: r.labels, inline: args.includes('--inline'), digits }
-const writers = { text: toText, js: toJS, glsl: toGLSL }
-if (!writers[fmt]) { console.error(`--format ${fmt}: text, js or glsl`); process.exit(1) }
-const c = fmt === 'text' ? '#' : '//'
-const head = [`${c} ${r.title || file}: the signed distance, in ${r.unit}${fmt === 'text' ? ', at the point (x, y, z)' : ''}`,
+const writers = { math: toMath, latex: toLatex, js: toJS, glsl: toGLSL }
+if (!writers[fmt]) { console.error(`--format ${fmt}: math, latex, js or glsl`); process.exit(1) }
+const c = ({ math: '#', latex: '%' })[fmt] ?? '//'
+const head = [`${c} ${r.title || file}: the signed distance, in ${r.unit}${fmt === 'math' ? ', at the point (x, y, z)' : ''}`,
               ...r.warnings.map(w => `${c} note: ${w}`), ...r.skipped.map(s => `${c} not in it: ${s}`)].join('\n')
 const out = `${head}\n${writers[fmt](r.d, o)}`
 if (opt('-o')) writeFileSync(opt('-o'), out)

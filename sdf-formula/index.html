@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scene SDF formula</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <style>
     :root { --bg: #f6f6f4; --panel: #fff; --ink: #1d1d1b; --mute: #6b6b66; --line: #d9d9d4; --accent: #2b6cb0; --warn: #9a5b00; }
     @media (prefers-color-scheme: dark) { :root { --bg: #161615; --panel: #1f1f1d; --ink: #e8e8e4; --mute: #9a9a94; --line: #34342f; --accent: #6ba6e8; --warn: #e0a24a; } }
@@ -23,6 +24,11 @@
     button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
     textarea { width: 100%; height: 56vh; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: inherit; background: var(--bg);
                border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre; resize: vertical; }
+    #math { height: 56vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; background: var(--bg); }
+    #math .eq { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+    #math .eq .katex-display { margin: 0.35em 0; text-align: left; }
+    #math .eq .katex-display > .katex { text-align: left; }
+    #math .where { color: var(--mute); margin: 8px 0 2px; }
     #notes { color: var(--warn); font-size: 13px; white-space: pre-wrap; }
     #error { color: #c53030; white-space: pre-wrap; }
     canvas { width: 100%; aspect-ratio: 1; border-radius: 6px; border: 1px solid var(--line); image-rendering: pixelated; display: block; }
@@ -44,7 +50,9 @@
                 <label>weglaten <input type="text" id="exclude" placeholder="labels, komma's" size="16"></label>
             </div>
             <div class="row" role="group" aria-label="format">
-                <button data-fmt="text" aria-pressed="true">Formule</button>
+                <button data-fmt="math" aria-pressed="true">Formule</button>
+                <button data-fmt="latex" aria-pressed="false">LaTeX</button>
+                <button data-fmt="text" aria-pressed="false">Tekst</button>
                 <button data-fmt="js" aria-pressed="false">JavaScript</button>
                 <button data-fmt="glsl" aria-pressed="false">GLSL</button>
                 <span style="flex:1"></span>
@@ -53,7 +61,8 @@
             </div>
             <div id="error"></div>
             <div id="notes"></div>
-            <textarea id="out" readonly spellcheck="false" placeholder="De formule verschijnt hier."></textarea>
+            <div id="math"><p>De formule verschijnt hier.</p></div>
+            <textarea id="out" readonly spellcheck="false" hidden></textarea>
         </section>
     </div>
     <div>
@@ -72,11 +81,13 @@
 </main>
 <script type="module">
 import { sceneToSDF } from './src/scene.js'
-import { toText, toJS, toGLSL, compile } from './src/emit.js'
+import { toJS, toGLSL, compile } from './src/emit.js'
+import { toMath, toLatex, latexLines } from './src/math.js'
+import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.mjs'
 import { reset } from './src/expr.js'
 
 const $ = id => document.getElementById(id)
-let doc = null, name = 'scene', result = null, fn = null, fmt = 'text', centre = [0, 0, 0]
+let doc = null, name = 'scene', result = null, fn = null, fmt = 'math', centre = [0, 0, 0]
 
 const drop = $('drop'), input = $('file')
 drop.onclick = () => input.click()
@@ -116,15 +127,31 @@ function convert() {
     $('notes').textContent = [...result.warnings.map(w => '• ' + w), ...result.skipped.filter(s => !/a light|haze box/.test(s)).map(s => '• niet in de formule: ' + s)].join('\n')
     write(); draw()
 }
+/* THE FORMULA: rendered (KaTeX, an equation a line), or as text to copy -- LaTeX, Unicode, JavaScript, GLSL */
 function write() {
     if (!result) return
     const o = { labels: result.labels, inline: $('inline').checked }
-    try { $('out').value = ({ text: toText, js: toJS, glsl: toGLSL })[fmt](result.d, o) }
-    catch (e) { $('out').value = ''; $('error').textContent = e.message }
+    const rendered = fmt === 'math'
+    $('math').hidden = !rendered; $('out').hidden = rendered
+    try {
+        $('out').value = ({ math: toLatex, latex: toLatex, text: toMath, js: toJS, glsl: toGLSL })[fmt](result.d, o)
+        if (rendered) render(latexLines(result.d, o))
+    } catch (e) { $('out').value = ''; $('math').textContent = ''; $('error').textContent = e.message }
+}
+function render(lines) {
+    const box = $('math')
+    box.textContent = ''
+    lines.forEach(([lhs, rhs], i) => {
+        if (i === 1) { const w = document.createElement('div'); w.className = 'where'; w.textContent = 'waarin'; box.append(w) }
+        const el = document.createElement('div')
+        el.className = 'eq'
+        katex.render(`${lhs} = ${rhs}`, el, { displayMode: true, throwOnError: false, maxSize: 20, maxExpand: 10000 })
+        box.append(el)
+    })
 }
 $('copy').onclick = () => navigator.clipboard?.writeText($('out').value)
 $('save').onclick = () => {
-    const ext = { text: 'txt', js: 'js', glsl: 'glsl' }[fmt]
+    const ext = { math: 'tex', latex: 'tex', text: 'txt', js: 'js', glsl: 'glsl' }[fmt]
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([$('out').value], { type: 'text/plain' }))
     a.download = `${name}-sdf.${ext}`; a.click(); URL.revokeObjectURL(a.href)
