@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scene SDF formula</title>
+<style>
+    :root { --bg: #f6f6f4; --panel: #fff; --ink: #1d1d1b; --mute: #6b6b66; --line: #d9d9d4; --accent: #2b6cb0; --warn: #9a5b00; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #161615; --panel: #1f1f1d; --ink: #e8e8e4; --mute: #9a9a94; --line: #34342f; --accent: #6ba6e8; --warn: #e0a24a; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
+    main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 380px; }
+    @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 4px 0; color: var(--mute); }
+    section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+    #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--mute); cursor: pointer; }
+    #drop.over { border-color: var(--accent); color: var(--ink); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0; }
+    label { display: inline-flex; gap: 5px; align-items: center; }
+    button, select, input[type=text] { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+    button { cursor: pointer; }
+    button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+    textarea { width: 100%; height: 56vh; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: inherit; background: var(--bg);
+               border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre; resize: vertical; }
+    #notes { color: var(--warn); font-size: 13px; white-space: pre-wrap; }
+    #error { color: #c53030; white-space: pre-wrap; }
+    canvas { width: 100%; aspect-ratio: 1; border-radius: 6px; border: 1px solid var(--line); image-rendering: pixelated; display: block; }
+    .small { font-size: 12px; color: var(--mute); }
+    input[type=range] { flex: 1; min-width: 120px; }
+</style>
+</head>
+<body>
+<main>
+    <div>
+        <section>
+            <h1>ShadyTracer-scène → SDF-formule</h1>
+            <p>Kies of sleep een scène (<code>.json</code>, File › Export › scene). Alleen geometrie: geen lichten, materialen of texturen.</p>
+            <div id="drop" tabindex="0">Sleep een scène hierheen, of klik om er een te kiezen<input id="file" type="file" accept=".json,application/json" hidden></div>
+            <div class="row">
+                <label><input type="checkbox" id="skip" checked> onbekende delen overslaan</label>
+                <label><input type="checkbox" id="planes" checked> vlakken (vloer) meenemen</label>
+                <label><input type="checkbox" id="inline"> één expressie (inline)</label>
+                <label>weglaten <input type="text" id="exclude" placeholder="labels, komma's" size="16"></label>
+            </div>
+            <div class="row" role="group" aria-label="format">
+                <button data-fmt="text" aria-pressed="true">Formule</button>
+                <button data-fmt="js" aria-pressed="false">JavaScript</button>
+                <button data-fmt="glsl" aria-pressed="false">GLSL</button>
+                <span style="flex:1"></span>
+                <button id="copy">Kopiëren</button>
+                <button id="save">Opslaan</button>
+            </div>
+            <div id="error"></div>
+            <div id="notes"></div>
+            <textarea id="out" readonly spellcheck="false" placeholder="De formule verschijnt hier."></textarea>
+        </section>
+    </div>
+    <div>
+        <section>
+            <h1>Doorsnede</h1>
+            <p class="small">f in een vlak door de scène: blauw binnen, oranje buiten, lijnen elke stap, wit het oppervlak f = 0. Dit is de formule zelf, geen render.</p>
+            <div class="row">
+                <label>vlak <select id="plane"><option value="xz">XZ (zij)</option><option value="xy">XY (boven)</option><option value="yz">YZ (voor)</option></select></label>
+                <label>bereik <input type="text" id="range" size="6"></label>
+            </div>
+            <div class="row"><span id="offLabel" class="small">y = 0</span><input type="range" id="offset" min="-1" max="1" step="0.002" value="0"></div>
+            <canvas id="slice" width="320" height="320"></canvas>
+            <p id="probe" class="small">&nbsp;</p>
+        </section>
+    </div>
+</main>
+<script type="module">
+import { sceneToSDF } from './src/scene.js'
+import { toText, toJS, toGLSL, compile } from './src/emit.js'
+import { reset } from './src/expr.js'
+
+const $ = id => document.getElementById(id)
+let doc = null, name = 'scene', result = null, fn = null, fmt = 'text', centre = [0, 0, 0]
+
+const drop = $('drop'), input = $('file')
+drop.onclick = () => input.click()
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') input.click() }
+input.onchange = () => input.files[0] && load(input.files[0])
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over') }
+drop.ondragleave = () => drop.classList.remove('over')
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && load(e.dataTransfer.files[0]) }
+async function load(file) {
+    name = file.name.replace(/\.json$/i, '')
+    try { doc = JSON.parse(await file.text()) } catch (e) { $('error').textContent = `${file.name}: geen JSON (${e.message})`; return }
+    drop.textContent = file.name
+    // the slice around what the scene's camera looks at, as wide as about what it sees
+    const cam = doc.view?.camera
+    centre = Array.isArray(cam?.target) ? cam.target.slice(0, 3) : [0, 0, 0]
+    const R = cam?.distance ? cam.distance * 0.45 : Math.min(doc.envRadius || 500, 5000) * 0.25
+    $('range').value = String(+R.toPrecision(2))
+    convert()
+}
+for (const id of ['skip', 'planes', 'inline']) $(id).onchange = convert
+$('exclude').onchange = convert
+for (const b of document.querySelectorAll('[data-fmt]')) b.onclick = () => {
+    fmt = b.dataset.fmt
+    for (const o of document.querySelectorAll('[data-fmt]')) o.setAttribute('aria-pressed', String(o === b))
+    write()
+}
+
+function convert() {
+    if (!doc) return
+    $('error').textContent = ''; $('notes').textContent = ''
+    reset()
+    try {
+        result = sceneToSDF(doc, { skipUnsupported: $('skip').checked, planes: $('planes').checked,
+            exclude: $('exclude').value.split(',').map(s => s.trim()).filter(Boolean) })
+        fn = compile(result.d, { labels: result.labels })
+    } catch (e) { result = fn = null; $('error').textContent = e.message; $('out').value = ''; draw(); return }
+    $('notes').textContent = [...result.warnings.map(w => '• ' + w), ...result.skipped.filter(s => !/a light|haze box/.test(s)).map(s => '• niet in de formule: ' + s)].join('\n')
+    write(); draw()
+}
+function write() {
+    if (!result) return
+    const o = { labels: result.labels, inline: $('inline').checked }
+    try { $('out').value = ({ text: toText, js: toJS, glsl: toGLSL })[fmt](result.d, o) }
+    catch (e) { $('out').value = ''; $('error').textContent = e.message }
+}
+$('copy').onclick = () => navigator.clipboard?.writeText($('out').value)
+$('save').onclick = () => {
+    const ext = { text: 'txt', js: 'js', glsl: 'glsl' }[fmt]
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([$('out').value], { type: 'text/plain' }))
+    a.download = `${name}-sdf.${ext}`; a.click(); URL.revokeObjectURL(a.href)
+}
+
+/* THE SLICE: the compiled formula at every pixel of a plane */
+const cv = $('slice'), g = cv.getContext('2d')
+for (const id of ['plane', 'range', 'offset']) $(id).oninput = draw
+const axes = { xy: [0, 1, 2], xz: [0, 2, 1], yz: [1, 2, 0] }
+const pointAt = (u, w, R, off) => {
+    const [a, b, c] = axes[$('plane').value], p = centre.slice()
+    p[a] += u; p[b] += w; p[c] += off
+    return p
+}
+function draw() {
+    const N = cv.width, R = Math.max(+$('range').value || 100, 1e-6), off = +$('offset').value * R
+    const c = axes[$('plane').value][2]
+    $('offLabel').textContent = `${'xyz'[c]} = ${+(centre[c] + off).toPrecision(4)}`
+    const img = g.createImageData(N, N), step = R / 10
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const u = (i / N * 2 - 1) * R, w = (1 - j / N * 2) * R
+        const d = fn ? fn(...pointAt(u, w, R, off)) : NaN
+        const k = 4 * (j * N + i)
+        if (!Number.isFinite(d)) { img.data.set([128, 128, 128, 255], k); continue }
+        const t = 1 - Math.exp(-Math.abs(d) / (R * 0.4))
+        const band = 0.85 + 0.15 * Math.cos(2 * Math.PI * d / step)
+        const col = d < 0 ? [60 + 60 * (1 - t), 110 + 70 * (1 - t), 200] : [235, 150 + 60 * (1 - t), 80 + 90 * (1 - t)]
+        const edge = Math.abs(d) < R * 2 / N * 1.2
+        img.data.set(edge ? [255, 255, 255, 255] : [col[0] * band, col[1] * band, col[2] * band, 255], k)
+    }
+    g.putImageData(img, 0, 0)
+}
+cv.onmousemove = e => {
+    if (!fn) return
+    const r = cv.getBoundingClientRect(), R = +$('range').value || 100
+    const u = ((e.clientX - r.left) / r.width * 2 - 1) * R, w = (1 - (e.clientY - r.top) / r.height * 2) * R
+    const p = pointAt(u, w, R, +$('offset').value * R)
+    $('probe').textContent = `f(${p.map(v => +v.toPrecision(4)).join(', ')}) = ${+fn(...p).toPrecision(5)} ${result?.unit ?? ''}`
+}
+draw()
+</script>
+</body>
+</html>

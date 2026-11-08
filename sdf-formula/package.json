@@ -1,0 +1,11 @@
+{
+  "name": "shadytracer-sdf-formula",
+  "private": true,
+  "type": "module",
+  "description": "A ShadyTracer scene's geometry as one signed distance function f(x, y, z): text, JavaScript or GLSL",
+  "bin": { "scene2sdf": "cli.mjs" },
+  "scripts": {
+    "test": "node test/test.mjs",
+    "sync": "node tools/sync-prelude.mjs"
+  }
+}
