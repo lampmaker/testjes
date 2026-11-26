@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Steep Life — a still life you can drink</title>
+<meta name="description" content="Make a cup of tea inside an Old Master painting. Please touch the artwork.">
+<meta name="theme-color" content="#0b0806">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23120d09'/%3E%3Cpath d='M14 26h30v6a15 15 0 0 1-30 0z' fill='%23f3efe6'/%3E%3Cpath d='M44 28h4a5 5 0 0 1 0 10h-5' fill='none' stroke='%23f3efe6' stroke-width='3'/%3E%3Cpath d='M14 26h30' stroke='%23d9ad4e' stroke-width='2'/%3E%3Cpath d='M24 20c-3-4 3-5 0-9M33 20c-3-4 3-5 0-9' fill='none' stroke='%23c9b89a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="stage" aria-label="A still life with tea things. It is interactive."></canvas>
+
+<div id="hud" aria-hidden="true">
+  <div class="hudlabel" id="hudKettle"></div>
+  <div class="hudlabel" id="hudCup"></div>
+</div>
+<div id="tip" aria-hidden="true"></div>
+<div id="hint" role="status" aria-live="polite"></div>
+<div id="fortune" hidden>
+  <div class="eyebrow">A reading of the dregs</div>
+  <p id="fortuneShape"></p>
+  <p id="fortuneText"></p>
+</div>
+
+<nav id="bar" hidden>
+  <button id="btnSound" title="Sound" aria-label="Toggle sound"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none"/></svg></button>
+  <button id="btnGallery" title="Gallery" aria-label="Open gallery"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" fill="none"/><rect x="7" y="8" width="10" height="8" fill="none"/></svg></button>
+  <button id="btnHelp" title="How to play" aria-label="How to play"><svg viewBox="0 0 24 24"><path d="M9 9.5a3 3 0 1 1 4.5 2.6c-1 .6-1.5 1.2-1.5 2.4" fill="none"/><circle cx="12" cy="17.6" r=".6"/></svg></button>
+</nav>
+<button id="btnFinish" class="cta" hidden>Sign &amp; hang it</button>
+
+<section id="title" class="overlay">
+  <div class="titlecard">
+    <div class="eyebrow">Room 12 · Dutch School, 2026</div>
+    <h1>Steep Life</h1>
+    <p class="sub">a still life you can drink</p>
+    <p class="blurb">Oil on canvas, hot water, patience.<br>Visitors are kindly requested to <em>touch the painting</em>.</p>
+    <button id="btnBegin" class="cta">Touch the painting</button>
+    <p class="fine">tap · hold to pour · draw circles to stir<br>sound on, if the room allows</p>
+  </div>
+</section>
+
+<section id="help" class="overlay" hidden>
+  <div class="card">
+    <h2>How to make tea in a painting</h2>
+    <ul>
+      <li><b>Hold</b> the stoneware jug to fill the kettle.</li>
+      <li><b>Tap</b> the kettle to switch it on. <b>Hold</b> it to pour.</li>
+      <li><b>Tap</b> a tin to choose a tea. Each label says what it likes.</li>
+      <li><b>Tap</b> the tag to dunk the bag; <b>hold</b> it to lift the bag out.</li>
+      <li><b>Hold</b> the creamer for milk. <b>Tap</b> sugar, lemon, stroopwafel.</li>
+      <li><b>Draw circles</b> in the cup to stir.</li>
+      <li><b>Tap</b> the cup to sip. It leaves the painting briefly.</li>
+    </ul>
+    <p class="fine">There is no wrong way. The critic will have opinions regardless.<br>If you stop touching it, the paint dries.</p>
+    <button class="cta" data-close>Carry on</button>
+  </div>
+</section>
+
+<section id="placard" class="overlay" hidden>
+  <div class="wall">
+    <div class="frame"><img id="shot" alt="Your painting"></div>
+    <div class="label">
+      <h2 id="pTitle"></h2>
+      <p class="by">You, <span id="pYear"></span></p>
+      <p class="medium" id="pMedium"></p>
+      <p class="review" id="pReview"></p>
+      <p class="critic" id="pCritic"></p>
+      <p class="verdict" id="pVerdict"></p>
+      <p class="estimate">Auction estimate: <b id="pEstimate"></b></p>
+      <p class="dregs" id="pDregs"></p>
+      <div class="actions">
+        <button class="cta" id="btnAgain">Paint another</button>
+        <button class="ghost" id="btnShare">Share</button>
+        <button class="ghost" id="btnSave">Save card</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="gallery" class="overlay" hidden>
+  <div class="gwrap">
+    <header><h2>The Collection</h2><p class="fine" id="gCount"></p><button class="ghost" data-close>Back to the easel</button></header>
+    <div id="gGrid"></div>
+  </div>
+</section>
+
+<div id="fallback" hidden><p>This painting needs WebGL 2 to dry properly.<br>Please try a recent browser.</p></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
