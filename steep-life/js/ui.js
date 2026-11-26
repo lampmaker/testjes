@@ -155,9 +155,19 @@ export async function makeCard(entry = current) {
   x.font = `italic 500 22px ${SERIF}`; x.fillStyle = '#b9aa8c'; x.fillText('a still life you can drink', W / 2, H - 18);
   return c;
 }
+// Where the page is hosted somewhere that brokers file saves (window.claude), use that;
+// everywhere else the plain download link does the job.
+let hostSave = null, cardBlob = null;
+if (window.claude && window.claude.use) window.claude.use('downloads').then((d) => { hostSave = d; }).catch(() => {});
+$('cardLink').addEventListener('click', (e) => {
+  if (!hostSave || !cardBlob) return;
+  e.preventDefault();
+  hostSave.save({ filename: e.currentTarget.download, data: cardBlob }).catch(() => {});
+});
 export async function saveCard() {
   const c = await makeCard();
   const url = c.toDataURL('image/png');
+  c.toBlob((b) => { cardBlob = b; }, 'image/png');
   $('cardImg').src = url;
   const a = $('cardLink');
   a.href = url;
