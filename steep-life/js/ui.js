@@ -157,19 +157,27 @@ export async function makeCard(entry = current) {
 }
 export async function saveCard() {
   const c = await makeCard();
-  const a = document.createElement('a');
+  const url = c.toDataURL('image/png');
+  $('cardImg').src = url;
+  const a = $('cardLink');
+  a.href = url;
   a.download = 'steep-life-' + current.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.png';
-  a.href = c.toDataURL('image/png'); document.body.append(a); a.click(); a.remove();
+  show('card');
 }
 export async function shareCard() {
   const text = `“${current.title}” — ${current.medium}. Auction estimate: ${current.estimate}. Painted in Steep Life, a still life you can drink.`;
+  const copy = async () => { try { await navigator.clipboard.writeText(text + ' ' + location.href); return 'copied'; } catch (e) { return 'failed'; } };
   try {
-    const c = await makeCard();
-    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-    const file = new File([blob], 'steep-life.png', { type: 'image/png' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: current.title, text }); return 'shared'; }
-    if (navigator.share) { await navigator.share({ title: current.title, text, url: location.href }); return 'shared'; }
-    await navigator.clipboard.writeText(text + ' ' + location.href);
-    return 'copied';
-  } catch (e) { return 'cancelled'; }
+    if (navigator.share) {
+      const c = await makeCard();
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      const file = new File([blob], 'steep-life.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: current.title, text }); return 'shared'; }
+      await navigator.share({ title: current.title, text, url: location.href });
+      return 'shared';
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return 'cancelled';
+  }
+  return copy();
 }

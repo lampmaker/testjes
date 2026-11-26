@@ -619,6 +619,21 @@ export function buildScene(renderer) {
     items.bag = { id: 'bag', group: bag, body, paperMat, tag, string, proxy, proxy2, name: 'Tea bag' };
   }
 
+  // ----------------------------------------------------------------------- moth
+  {
+    const group = new THREE.Group(); group.visible = false; scene.add(group);
+    const wingMat = new THREE.MeshStandardMaterial({ map: TX.mothWing(), transparent: true, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.85 });
+    const wg = new THREE.PlaneGeometry(0.024, 0.024).translate(0.012, 0, 0.002).rotateX(-Math.PI / 2);
+    const right = new THREE.Mesh(wg, wingMat), left = new THREE.Mesh(wg, wingMat);
+    left.scale.x = -1; right.castShadow = left.castShadow = true;
+    group.add(right, left);
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.0019, 0.011, 4, 8).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.95 }));
+    body.castShadow = true; group.add(body);
+    const proxy = addProxy('moth', group, new THREE.SphereGeometry(0.03, 8, 6));
+    proxy.userData.off = true;
+    items.moth = { id: 'moth', group, left, right, proxy, name: 'Moth (uninvited)' };
+  }
+
   function fmtMin(sec) { const m = sec / 60; return `${Number.isInteger(m) ? m : m.toFixed(1)} min`; }
 
   return world;

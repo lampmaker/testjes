@@ -3,6 +3,8 @@
   --ink: #efe6d3; --dim: #b9aa8c; --gold: #d9b566; --wall: #14100c; --card: #f1ead9; --cardink: #1d1711;
 }
 * { box-sizing: border-box; }
+:root { color-scheme: dark; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 html, body { margin: 0; height: 100%; background: #050403; color: var(--ink); font-family: var(--serif); overflow: hidden; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 canvas#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
@@ -57,7 +59,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .eyebrow { font-size: 14px; letter-spacing: .28em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
 .fine { font-size: 15px; color: var(--dim); font-style: italic; line-height: 1.45; }
 
-#title { background: radial-gradient(ellipse at 50% 42%, rgba(5,4,3,.2), rgba(5,4,3,.74) 75%); }
+#title { background: radial-gradient(ellipse at 50% 42%, rgba(5,4,3,.12), rgba(5,4,3,.62) 80%); }
 .titlecard { text-align: center; padding: 24px; max-width: 640px; text-shadow: 0 2px 30px #000, 0 0 60px #000; }
 .titlecard h1 { font-size: clamp(64px, 13vw, 148px); line-height: .9; margin: 14px 0 6px; font-weight: 500; letter-spacing: -.01em; color: #f7efdc; }
 .titlecard .sub { font-style: italic; font-size: clamp(22px, 3.4vw, 34px); margin: 0 0 22px; color: var(--gold); }
@@ -105,3 +107,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #fortune p { margin: 8px 0 0; font-size: clamp(19px, 2.6vw, 26px); line-height: 1.3; text-wrap: balance; }
 #fortune #fortuneText { font-style: italic; color: #f3e6c4; }
 #fallback { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; font-size: 22px; font-style: italic; padding: 24px; }
+
+#card { background: rgba(8,6,4,.9); z-index: 20; align-items: start; }
+.cardwrap { display: grid; justify-items: center; gap: 16px; padding: 22px 16px 30px; margin: auto; }
+.cardwrap img { display: block; width: auto; max-width: min(92vw, 560px); max-height: 72vh; box-shadow: 0 30px 70px rgba(0,0,0,.7); -webkit-user-select: auto; user-select: auto; -webkit-touch-callout: default; }
+.cardwrap .actions { justify-content: center; color: var(--ink); }
+.cardwrap a.cta { text-decoration: none; display: inline-block; font-size: 16px; padding: 9px 18px 10px; }
+.cardwrap .fine { margin: 0; text-align: center; max-width: 420px; }
+@media (prefers-reduced-motion: reduce) { .overlay, .overlay.out { animation-duration: .01s; } }

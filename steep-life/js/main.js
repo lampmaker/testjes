@@ -63,7 +63,7 @@ function freshState() {
     bag: { state: 'none', tea: null, e: 0, wet: 0, boost: 0, dunk: 0 },
     stir: { active: false, x: 0, y: 0, tx: 0, ty: 0, angle: 0, linger: 0 },
     rec: { bags: 0, dunks: 0, milkFirst: false, curdled: false, stirred: false, galaxy: false, overflow: false, sips: 0, firstSipTemp: 0, waitSec: 0,
-      wafels: 0, wafelWarm: false, wafelCold: false, watchTaps: 0, bagLeftIn: false, lemon: 0, bagUsed: null },
+      wafels: 0, wafelWarm: false, wafelCold: false, watchTaps: 0, bagLeftIn: false, lemon: 0, bagUsed: null, moth: null },
     turb: 0, omegaT: 0, galaxyT: 0, pourAt: 0, startAt: 0, snap: null, appraisal: null, readingShown: false,
     timed: [], dryCubes: [], usedBags: [], wafelOnCup: null, idealSaid: false, tempSaid: false, lastTick: 0,
   };
@@ -417,7 +417,7 @@ function record() {
     milk: c.poured + c.milk > 0 ? c.milk / (c.poured + c.milk) : 0, sugar: c.sugar, lemon: r.lemon, curdled: r.curdled, milkFirst: r.milkFirst,
     stirred: r.stirred, galaxy: r.galaxy, overflow: r.overflow, reboiled: G.kettle.boils, sips: r.sips, firstSipTemp: r.firstSipTemp, waitSec: r.waitSec,
     bagLeftIn: r.bagLeftIn, dunks: r.dunks, bags: r.bags, wafels: r.wafels, wafelWarm: r.wafelWarm, wafelCold: r.wafelCold && !r.wafelWarm, watchTaps: r.watchTaps,
-    totalSec: now - G.startAt,
+    totalSec: now - G.startAt, moth: r.moth,
   };
 }
 
@@ -493,7 +493,7 @@ function simulate(dt) {
   if (b.state === 'cup' && c.vol > 0.15 && c.poured > 0.05) {
     const tea = b.tea, tdt = dt * TIME_SCALE;
     c.steepSec += tdt;
-    const f = Math.pow(clamp((c.temp - 22) / (tea.temp - 22), 0, 1.2), 1.5);
+    const f = Math.max(0.05, Math.pow(clamp((c.temp - 22) / (tea.temp - 22), 0, 1.2), 1.5));   // cold water steeps too, eventually
     const de = ((1.6 - b.e) / (0.74 * tea.time)) * f * tdt * (1 + b.boost);
     b.e += de;
     const ds = de / Math.max(0.6, c.vol);
@@ -638,6 +638,63 @@ function returnSpoon() {
     .then(() => { SPOON.busy = false; audio.clink(0.25); });
 }
 
+// ----------------------------------------------------------------------- moth --
+// It arrives uninvited, sits on something for a while, and leaves when it likes.
+const MOTH = items.moth;
+const moth = { state: 'away', t: 26 + Math.random() * 20, k: 0, from: V(), to: V(), spot: null, said: false };
+function mothSpots() {
+  const tin = (i) => world.tins[i];
+  return [
+    { item: J, p: V(J.home.x - 0.012, 0.2305, J.home.z + 0.05) },
+    { item: tin(2), p: V(tin(2).top.x + 0.019, tin(2).top.y + 0.0098, tin(2).top.z + 0.012) },
+    { item: tin(3), p: V(tin(3).top.x - 0.018, tin(3).top.y + 0.0098, tin(3).top.z + 0.014) },
+    { item: null, p: V(LAYOUT.plate.x - 0.082, 0.0125, LAYOUT.plate.z + 0.025) },
+    { item: null, p: V(LAYOUT.sugar.x + 0.002, items.sugar.group.position.y + 0.0625, LAYOUT.sugar.z) },
+  ];
+}
+function mothLeave(shooed) {
+  if (moth.state !== 'sitting' && moth.state !== 'arriving') return;
+  moth.from.copy(MOTH.group.position); moth.to.set(-0.95 + Math.random() * 0.3, 0.75, 0.3); moth.k = 0; moth.state = 'leaving';
+  MOTH.proxy.userData.off = true;
+  if (shooed) { G.rec.moth = 'shooed'; say('The moth leaves, offended. It will mention this to other moths.', 4.5); audio.paper(); }
+}
+function updateMoth(dt) {
+  const g = MOTH.group;
+  if (moth.state === 'away') {
+    if (phase !== 'play') return;
+    moth.t -= dt;
+    if (moth.t <= 0) {
+      const spots = mothSpots().filter((s) => !s.item || !s.item.busy);
+      moth.spot = spots[Math.floor(Math.random() * spots.length)];
+      moth.from.set(0.95, 0.62 + Math.random() * 0.2, 0.25); moth.to.copy(moth.spot.p); moth.k = 0; moth.state = 'arriving'; g.visible = true;
+    }
+    return;
+  }
+  let flap;
+  if (moth.state === 'sitting') {
+    moth.t -= dt;
+    flap = 0.16 + 0.55 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.9), 6);
+    if (moth.t <= 0 || (moth.spot.item && moth.spot.item.busy) || phase === 'placard') mothLeave(false);
+  } else {
+    const arriving = moth.state === 'arriving';
+    moth.k = Math.min(1, moth.k + dt / (arriving ? 4.2 : 2.6));
+    const e = arriving ? ease.out(moth.k) : ease.in(moth.k), wob = arriving ? 1 - e : e;
+    const px = g.position.x, pz = g.position.z;
+    g.position.lerpVectors(moth.from, moth.to, e);
+    g.position.x += Math.sin(now * 5.1) * 0.05 * wob; g.position.y += (Math.sin(now * 7.7) * 0.035 + Math.sin(now * 13) * 0.012) * wob + Math.sin(e * Math.PI) * 0.06; g.position.z += Math.cos(now * 4.3) * 0.05 * wob;
+    if (dt > 0) g.rotation.y = Math.atan2(-(g.position.x - px), -(g.position.z - pz));
+    flap = 0.75 * Math.sin(now * 95) + 0.25;
+    if (moth.k >= 1) {
+      if (arriving) {
+        moth.state = 'sitting'; moth.t = 28 + Math.random() * 30; g.rotation.y = 0.6 + Math.random(); MOTH.proxy.userData.off = false;
+        if (!G.rec.moth) G.rec.moth = 'stayed';
+        if (!moth.said) { moth.said = true; say('A moth has arrived. Every proper still life has one.', 4.5); }
+      } else { moth.state = 'away'; moth.t = 45 + Math.random() * 50; g.visible = false; }
+    }
+  }
+  MOTH.right.rotation.z = flap; MOTH.left.rotation.z = -flap;
+}
+
 // --------------------------------------------------------------------- camera --
 const CAM = {
   wide: { pos: V(0, 0.42, 1.25), tgt: V(0.02, 0.075, 0), halfW: 0.5, narrowW: 0.47 },
@@ -688,7 +745,7 @@ function stirTarget(x, y) {
   }
   st.tx = s.x; st.ty = s.y;
 }
-const VERBS = { kettle: 'tap: switch · hold: pour', jug: 'hold to fill the kettle', creamer: 'hold to pour', sugar: 'tap for a cube', lemon: 'tap to squeeze', cup: 'tap: sip · circles: stir', bag: 'tap: dunk · hold: lift out', spoon: 'draw circles in the cup', watch: '' };
+const VERBS = { kettle: 'tap: switch · hold: pour', jug: 'hold to fill the kettle', creamer: 'hold to pour', sugar: 'tap for a cube', lemon: 'tap to squeeze', cup: 'tap: sip · circles: stir', bag: 'tap: dunk · hold: lift out', spoon: 'draw circles in the cup', watch: '', moth: 'tap to shoo (or do not)' };
 function tipFor(id) {
   const it = items[id]; if (!it) return '';
   let verb = VERBS[id] ?? '';
@@ -743,6 +800,7 @@ function tap(id) {
     case 'cup': return sip();
     case 'bag': return dunk();
     case 'spoon': return say(G.cup.vol > 0.05 ? 'Draw circles in the cup. The spoon will catch on.' : 'A spoon, waiting for something to stir.');
+    case 'moth': return mothLeave(true);
     case 'watch': G.rec.watchTaps++; return say(G.cup.steepSec > 0 ? `${fmtTime(G.cup.steepSec)} of tea-time. Time runs fast inside paintings.` : 'The watch waits for water. One turn of the hand is six minutes of tea.');
     default: return null;
   }
@@ -822,6 +880,7 @@ function update(dt) {
   updateHolds();
   if (phase === 'play' || phase === 'reading') simulate(dt);
   updateObjects(dt);
+  updateMoth(dt);
   updateCamera(dt);
   liquid.step(dt, now);
   if (tweensActive() || K.flowing || J.flowing || CR.flowing || G.stir.active) active();
@@ -858,7 +917,11 @@ UI.on('btnBegin', begin);
 UI.on('btnFinish', finish);
 UI.on('btnAgain', newCanvas);
 UI.on('btnSave', () => UI.saveCard());
-UI.on('btnShare', async (e) => { const r = await UI.shareCard(); if (r === 'copied') { const b = e.target; b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Share'; }, 1600); } });
+UI.on('btnShare', async (e) => {
+  const b = e.currentTarget, r = await UI.shareCard();
+  if (r === 'failed') return UI.saveCard();          // nowhere to share to: show the card instead
+  if (r === 'copied') { b.textContent = 'Copied to clipboard'; setTimeout(() => { b.textContent = 'Share'; }, 1800); }
+});
 UI.on('btnGallery', () => UI.showGallery());
 UI.on('btnHelp', () => UI.show('help'));
 UI.on('btnSound', (e) => { audio.init(); audio.setMuted(!audio.muted); e.currentTarget.classList.toggle('off', audio.muted); });
@@ -866,7 +929,7 @@ document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('cli
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && phase === 'title') begin();
   if (e.key === 'm') document.getElementById('btnSound').click();
-  if (e.key === 'Escape') for (const id of ['help', 'gallery']) UI.hide(id);
+  if (e.key === 'Escape') for (const id of ['help', 'gallery', 'card']) UI.hide(id);
 });
 if (query.has('mute')) { audio.setMuted(true); document.getElementById('btnSound').classList.add('off'); }
 
@@ -881,7 +944,7 @@ if (document.fonts && document.fonts.load) {
 // test hooks: drive the painting without a human
 window.__steep = {
   get G() { return G; }, get phase() { return phase; }, world, liquid, post, camera, items,
-  begin, tap, finish, newCanvas, record, sip,
+  begin, tap, finish, newCanvas, record, sip, moth,
   press(id) { press = { id, x: 0, y: 0, t: now, moved: false, hold: false, stirring: false }; if (id === 'jug' || id === 'creamer') { press.hold = true; pourFrom(id, 0.3); } },
   release() { onUp(); },
   stir(on, x = 0, y = 0) { G.stir.active = on; G.stir.tx = x; G.stir.ty = y; if (!on) G.stir.linger = 0.5; },

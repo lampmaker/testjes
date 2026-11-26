@@ -4,6 +4,7 @@ import { mulberry, pick, fmtTime } from './util.js';
 
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const num = (n) => (n < NUM.length ? NUM[n] : String(n));
+const Num = (n) => { const w = num(n); return w.charAt(0).toUpperCase() + w.slice(1); };
 
 const CRITICS = [
   ['H. van der Kettel', 'De Theepot Courant'],
@@ -87,10 +88,10 @@ export function appraise(rec) {
     quality = 15; weird += 4;
   } else if (!tea) {
     title = rec.pourTemp > 60 ? 'Hot Water, a Study' : 'Cold Water in a Good Cup';
-    notes.push(pick([
+    notes.push(rec.pourTemp > 60 ? pick([
       'Technically flawless hot water. The absence of tea is felt, like a chair pulled away.',
       'The artist has omitted the tea. What remains is water, heated with conviction.',
-    ], rnd));
+    ], rnd) : 'Cold water, in a very good cup. The kettle was present throughout and was not consulted.');
     quality = 22; weird += 3;
   } else {
     const sw = strengthWord(s);
@@ -112,7 +113,7 @@ export function appraise(rec) {
     else if (Math.abs(rec.pourTemp - tea.temp) <= 6 && ratio > 0.8 && ratio < 1.25) { quality += 8; }
     if (rec.bagLeftIn && rec.sips > 0) { notes.push('The bag was left in while drinking, bobbing against the lip like a small wet ghost.'); weird += 1; quality -= 4; }
     if (rec.dunks >= 6) { notes.push(`The bag was dunked ${num(rec.dunks)} times. It has asked not to be contacted.`); weird += 1; }
-    if (rec.bags > 1) { notes.push(`${num(rec.bags)} bags were used, in the manner of a person who has been let down before.`); weird += 1; }
+    if (rec.bags > 1) { notes.push(`${Num(rec.bags)} bags were used, in the manner of a person who has been let down before.`); weird += 1; }
   }
 
   // ---------------------------------------------------------------- additions
@@ -139,13 +140,13 @@ export function appraise(rec) {
   } else if (tea && tea.id === 'pea' && rec.lemon) {
     notes.push('The lemon turned the blue liquor violet before our eyes. The gallery guard gasped. It is chemistry, but one prefers to call it theatre.');
     weird += 2; quality += 6; title = 'Butterfly Pea, Suddenly Violet';
-  } else if (rec.lemon >= 4) { notes.push(`${num(rec.lemon)} squeezes of lemon. This is no longer tea with lemon; it is lemon with a witness.`); weird += 1; }
+  } else if (rec.lemon >= 4) { notes.push(`${Num(rec.lemon)} squeezes of lemon. This is no longer tea with lemon; it is lemon with a witness.`); weird += 1; }
   if (rec.milk > 0.42 && hasLiquid) { notes.push('There is more milk here than tea. A latte, in denial.'); weird += 1; quality -= 8; }
   if (tea && rec.milk > 0.03 && (tea.id === 'sencha' || tea.id === 'chamomile' || tea.id === 'pea') && !rec.curdled) {
     notes.push(`Milk in ${tea.name}. The artist was told not to and did it anyway, which is how most art gets made.`); weird += 1; quality -= 6;
   }
-  if (rec.sugar >= 7) { notes.push(`${num(rec.sugar)} sugar cubes. The spoon stands unaided. Dentists gather outside the gallery.`); weird += 2; quality -= 10; }
-  else if (rec.sugar >= 4) { notes.push(`${num(rec.sugar)} sugars: less a beverage than a negotiation with syrup.`); weird += 1; }
+  if (rec.sugar >= 7) { notes.push(`${Num(rec.sugar)} sugar cubes. The spoon stands unaided. Dentists gather outside the gallery.`); weird += 2; quality -= 10; }
+  else if (rec.sugar >= 4) { notes.push(`${Num(rec.sugar)} sugars: less a beverage than a negotiation with syrup.`); weird += 1; }
   if (rec.galaxy) { notes.push(pick(['Stirred, the cup briefly contained a spiral galaxy. The artist did not seem surprised, which is the unsettling part.', 'For a few seconds there were stars in it. We have checked; there are not supposed to be.'], rnd)); weird += 1; quality += 4; }
   else if ((rec.milk > 0.02 || rec.sugar > 0) && !rec.stirred && hasLiquid) { notes.push('Nothing was stirred. The sugar sits at the bottom like a secret.'); quality -= 3; }
   if (rec.overflow) { notes.push('The cup was filled past its rim, and the saucer has become a small lake. Generous.'); weird += 1; quality -= 5; }
@@ -163,6 +164,8 @@ export function appraise(rec) {
   if (rec.wafelWarm) { notes.push('A stroopwafel was warmed on the rim until the syrup gave in. This is correct, and the Netherlands thanks you.'); quality += 7; }
   else if (rec.wafels >= 3) { notes.push('All three stroopwafels are gone. The plate has been left as evidence.'); weird += 1; }
   else if (rec.wafelCold) { notes.push('The stroopwafel was eaten cold, straight from the plate, like a person with a train to catch.'); }
+  if (rec.moth === 'stayed') { notes.push('A moth sat for the portrait and was left in peace, which is more than most sitters get.'); quality += 3; }
+  else if (rec.moth === 'shooed') { notes.push('A moth was waved away mid-composition. It has lodged a complaint.'); weird += 1; }
   if (rec.watchTaps >= 5) { notes.push('The artist kept tapping the watch. It did not help; it never does.'); }
   if (rec.totalSec > 600) { notes.push('The whole work took rather a long time. Tea, eventually.'); }
 

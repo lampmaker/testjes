@@ -504,4 +504,31 @@ export function dregsTexture(seed, leafColor = [38, 24, 12]) {
   return tex(c);
 }
 
+// --- the moth ---------------------------------------------------------------------
+// One wing; the other is its mirror. Every proper still life has an insect in it.
+export function mothWing() {
+  const S = 128;
+  const [c, ctx] = makeCanvas(S, S);
+  const path = () => {
+    ctx.beginPath(); ctx.moveTo(4, 70);
+    ctx.bezierCurveTo(30, 8, 96, 2, 124, 26);
+    ctx.bezierCurveTo(118, 62, 96, 88, 70, 96);
+    ctx.bezierCurveTo(74, 112, 52, 126, 30, 120);
+    ctx.bezierCurveTo(14, 108, 6, 90, 4, 70); ctx.closePath();
+  };
+  path();
+  const g = ctx.createRadialGradient(10, 70, 4, 40, 60, 120);
+  g.addColorStop(0, '#5b4630'); g.addColorStop(0.45, '#b9976a'); g.addColorStop(0.7, '#7a5a3a'); g.addColorStop(1, '#d8c39a');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.save(); path(); ctx.clip();
+  ctx.strokeStyle = 'rgba(48,32,18,0.55)'; ctx.lineWidth = 3;
+  for (const r of [46, 70, 94]) { ctx.beginPath(); ctx.arc(4, 70, r, -1.3, 0.9); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(240,226,190,0.5)'; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 9; i++) { const a = -1.15 + i * 0.24; ctx.beginPath(); ctx.moveTo(4, 70); ctx.lineTo(4 + Math.cos(a) * 130, 70 + Math.sin(a) * 130); ctx.stroke(); }
+  ctx.fillStyle = '#1d1410'; ctx.beginPath(); ctx.arc(84, 36, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e9d9a8'; ctx.beginPath(); ctx.arc(84, 36, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  return tex(c);
+}
+
 export { makeCanvas, fbmField, hexToRgb };
